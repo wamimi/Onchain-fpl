@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+*.lcov
+
+# Production
+build/
+dist/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Smart Contract artifacts (Foundry)
+contracts/cache/
+contracts/out/
+contracts/broadcast/
+
+# Frontend (Next.js / React)
+frontend/.next/
+frontend/out/
+frontend/.cache/
+
+# Backend
+backend/__pycache__/
+backend/*.pyc
+backend/venv/
+backend/.pytest_cache/
