@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "./League.sol";
+import "./PrizeDistributor.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
@@ -143,13 +144,11 @@ contract LeagueFactory is Ownable, Pausable {
      * @return true if valid
      */
     function _validatePrizeDistribution(uint256[] calldata distribution) private pure returns (bool) {
-        if (distribution.length == 0) return false;
-
-        uint256 total = 0;
+        // Convert calldata to memory for library call
+        uint256[] memory dist = new uint256[](distribution.length);
         for (uint256 i = 0; i < distribution.length; i++) {
-            if (distribution[i] == 0) return false;
-            total += distribution[i];
+            dist[i] = distribution[i];
         }
-        return total == 100;
+        return PrizeDistributor.validateDistribution(dist);
     }
 }
