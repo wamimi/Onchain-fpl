@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
+import "./PrizeDistributor.sol";
 
 /**
  * @title League
@@ -234,11 +235,7 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
      * @return true if valid
      */
     function _validatePrizeDistribution(uint256[] memory distribution) private pure returns (bool) {
-        uint256 total = 0;
-        for (uint256 i = 0; i < distribution.length; i++) {
-            total += distribution[i];
-        }
-        return total == 100;
+        return PrizeDistributor.validateDistribution(distribution);
     }
 
     /**
