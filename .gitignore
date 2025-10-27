@@ -52,3 +52,4 @@ backend/__pycache__/
 backend/*.pyc
 backend/venv/
 backend/.pytest_cache/
+contracts/lib/
