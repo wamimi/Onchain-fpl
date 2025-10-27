@@ -45,6 +45,7 @@ contracts/broadcast/
 frontend/.next/
 frontend/out/
 frontend/.cache/
+frontend/**/node_modules/
 
 # Backend
 backend/__pycache__/
