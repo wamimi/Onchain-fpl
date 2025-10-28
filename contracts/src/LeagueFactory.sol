@@ -20,15 +20,16 @@ contract LeagueFactory is Ownable, Pausable {
     mapping(address => address[]) public leaguesByCreator;
     mapping(address => bool) public isLeague;
 
-    // Events
+    // Events - Enhanced for frontend indexing
     event LeagueCreated(
         address indexed leagueAddress,
         address indexed creator,
         string name,
         uint256 entryFee,
-        uint256 duration
+        uint256 duration,
+        uint256 timestamp
     );
-    event OracleUpdated(address indexed oldOracle, address indexed newOracle);
+    event OracleUpdated(address indexed oldOracle, address indexed newOracle, uint256 timestamp);
 
     // Errors
     error ZeroAddress();
@@ -83,7 +84,7 @@ contract LeagueFactory is Ownable, Pausable {
         leaguesByCreator[msg.sender].push(leagueAddress);
         isLeague[leagueAddress] = true;
 
-        emit LeagueCreated(leagueAddress, msg.sender, name, entryFee, duration);
+        emit LeagueCreated(leagueAddress, msg.sender, name, entryFee, duration, block.timestamp);
 
         return leagueAddress;
     }
@@ -121,7 +122,7 @@ contract LeagueFactory is Ownable, Pausable {
         if (newOracle == address(0)) revert ZeroAddress();
         address oldOracle = oracle;
         oracle = newOracle;
-        emit OracleUpdated(oldOracle, newOracle);
+        emit OracleUpdated(oldOracle, newOracle, block.timestamp);
     }
 
     /**
@@ -150,5 +151,109 @@ contract LeagueFactory is Ownable, Pausable {
             dist[i] = distribution[i];
         }
         return PrizeDistributor.validateDistribution(dist);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    FRONTEND VIEW FUNCTIONS (PAGINATED)
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Get paginated list of leagues
+     * @param offset Starting index
+     * @param limit Number of leagues to return
+     * @return Array of league addresses
+     */
+    function getLeaguesPaginated(uint256 offset, uint256 limit) external view returns (address[] memory) {
+        if (offset >= allLeagues.length) {
+            return new address[](0);
+        }
+
+        uint256 end = offset + limit;
+        if (end > allLeagues.length) {
+            end = allLeagues.length;
+        }
+
+        uint256 resultLength = end - offset;
+        address[] memory result = new address[](resultLength);
+
+        for (uint256 i = 0; i < resultLength; i++) {
+            result[i] = allLeagues[offset + i];
+        }
+
+        return result;
+    }
+
+    /**
+     * @notice Get active (joinable) leagues with pagination
+     * @param offset Starting index
+     * @param limit Max number to return
+     * @return Array of active league addresses
+     */
+    function getActiveLeaguesPaginated(uint256 offset, uint256 limit)
+        external
+        view
+        returns (address[] memory)
+    {
+        // First pass: count active leagues and find offset position
+        uint256 activeCount = 0;
+        uint256 offsetPosition = 0;
+        bool foundOffset = false;
+
+        for (uint256 i = 0; i < allLeagues.length; i++) {
+            League league = League(allLeagues[i]);
+            if (league.isJoinable()) {
+                if (!foundOffset) {
+                    if (activeCount == offset) {
+                        offsetPosition = i;
+                        foundOffset = true;
+                    }
+                    activeCount++;
+                } else if (activeCount < offset + limit) {
+                    activeCount++;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if (!foundOffset || activeCount <= offset) {
+            return new address[](0);
+        }
+
+        // Second pass: collect leagues
+        uint256 resultLength = activeCount - offset > limit ? limit : activeCount - offset;
+        address[] memory result = new address[](resultLength);
+        uint256 resultIndex = 0;
+        uint256 currentActiveIndex = 0;
+
+        for (uint256 i = offsetPosition; i < allLeagues.length && resultIndex < resultLength; i++) {
+            League league = League(allLeagues[i]);
+            if (league.isJoinable()) {
+                if (currentActiveIndex >= offset) {
+                    result[resultIndex] = allLeagues[i];
+                    resultIndex++;
+                }
+                currentActiveIndex++;
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * @notice Get quick stats about all leagues
+     * @return total Total number of leagues
+     * @return active Number of active (joinable) leagues
+     */
+    function getLeagueStats() external view returns (uint256 total, uint256 active) {
+        total = allLeagues.length;
+        active = 0;
+
+        for (uint256 i = 0; i < allLeagues.length; i++) {
+            League league = League(allLeagues[i]);
+            if (league.isJoinable()) {
+                active++;
+            }
+        }
     }
 }
