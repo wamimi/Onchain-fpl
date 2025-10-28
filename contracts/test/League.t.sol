@@ -18,10 +18,10 @@ contract LeagueTest is Test {
     uint256 public constant ENTRY_FEE = 10 * 10**6; // 10 USDC
     uint256 public constant DURATION = 30 days;
 
-    event ParticipantJoined(address indexed participant, uint256 entryFee);
-    event ScoresUpdated(address[] participants, uint256[] scores);
-    event LeagueFinalized(address[] winners, uint256[] prizes);
-    event PrizeClaimed(address indexed winner, uint256 amount);
+    event ParticipantJoined(address indexed participant, uint256 entryFee, uint256 participantCount, uint256 timestamp);
+    event ScoresUpdated(address[] participants, uint256[] scores, uint256 timestamp);
+    event LeagueFinalized(address[] winners, uint256[] prizes, uint256 timestamp);
+    event PrizeClaimed(address indexed winner, uint256 amount, uint256 totalClaimed, uint256 timestamp);
 
     function setUp() public {
         creator = makeAddr("creator");
@@ -66,7 +66,7 @@ contract LeagueTest is Test {
         usdc.approve(address(league), ENTRY_FEE);
 
         vm.expectEmit(true, false, false, true);
-        emit ParticipantJoined(user1, ENTRY_FEE);
+        emit ParticipantJoined(user1, ENTRY_FEE, 1, block.timestamp);
 
         league.joinLeague();
         vm.stopPrank();
@@ -156,7 +156,7 @@ contract LeagueTest is Test {
         // Oracle updates scores
         vm.prank(oracle);
         vm.expectEmit(false, false, false, true);
-        emit ScoresUpdated(participants, scores);
+        emit ScoresUpdated(participants, scores, block.timestamp);
 
         league.updateScores(participants, scores);
 
@@ -339,7 +339,7 @@ contract LeagueTest is Test {
 
         vm.prank(user1);
         vm.expectEmit(true, false, false, true);
-        emit PrizeClaimed(user1, prize);
+        emit PrizeClaimed(user1, prize, prize, block.timestamp);
 
         league.claimPrize();
 

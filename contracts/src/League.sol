@@ -20,6 +20,37 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
     bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
     bytes32 public constant CREATOR_ROLE = keccak256("CREATOR_ROLE");
 
+    // Enums
+    enum LeagueStatus {
+        NotStarted,
+        Active,
+        Ended,
+        Finalized,
+        Cancelled
+    }
+
+    // Structs for frontend
+    struct LeagueInfo {
+        string name;
+        address creator;
+        uint256 entryFee;
+        uint256 prizePool;
+        uint256 startTime;
+        uint256 endTime;
+        uint256 participantCount;
+        bool finalized;
+        bool scoresUpdated;
+        LeagueStatus status;
+    }
+
+    struct ParticipantInfo {
+        address participant;
+        uint256 score;
+        uint256 rank;
+        uint256 claimableWinnings;
+        bool hasClaimed;
+    }
+
     // State variables
     IERC20 public immutable usdc;
     address public immutable creator;
@@ -34,16 +65,19 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
     mapping(address => bool) public participants;
     mapping(address => uint256) public fplScores;
     mapping(address => uint256) public claimableWinnings;
+    mapping(address => bool) public hasClaimed;
 
     bool public finalized;
     bool public scoresUpdated;
+    uint256 public totalClaimed;
 
-    // Events
-    event ParticipantJoined(address indexed participant, uint256 entryFee);
-    event ScoresUpdated(address[] participants, uint256[] scores);
-    event LeagueFinalized(address[] winners, uint256[] prizes);
-    event PrizeClaimed(address indexed winner, uint256 amount);
-    event EmergencyWithdraw(address indexed participant, uint256 amount);
+    // Events - Enhanced for frontend indexing
+    event ParticipantJoined(address indexed participant, uint256 entryFee, uint256 participantCount, uint256 timestamp);
+    event ScoresUpdated(address[] participants, uint256[] scores, uint256 timestamp);
+    event LeagueFinalized(address[] winners, uint256[] prizes, uint256 timestamp);
+    event PrizeClaimed(address indexed winner, uint256 amount, uint256 totalClaimed, uint256 timestamp);
+    event EmergencyWithdraw(address indexed participant, uint256 amount, uint256 timestamp);
+    event LeagueStatusChanged(LeagueStatus indexed oldStatus, LeagueStatus indexed newStatus, uint256 timestamp);
 
     // Errors
     error InvalidPrizeDistribution();
@@ -109,7 +143,7 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
 
         usdc.safeTransferFrom(msg.sender, address(this), entryFee);
 
-        emit ParticipantJoined(msg.sender, entryFee);
+        emit ParticipantJoined(msg.sender, entryFee, participantList.length, block.timestamp);
     }
 
     /**
@@ -129,7 +163,7 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
         }
 
         scoresUpdated = true;
-        emit ScoresUpdated(_participants, _scores);
+        emit ScoresUpdated(_participants, _scores, block.timestamp);
     }
 
     /**
@@ -159,7 +193,7 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
             prizes[i] = prizeAmount;
         }
 
-        emit LeagueFinalized(winners, prizes);
+        emit LeagueFinalized(winners, prizes, block.timestamp);
     }
 
     /**
@@ -172,9 +206,12 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
         if (amount == 0) revert NoClaimableWinnings();
 
         claimableWinnings[msg.sender] = 0;
+        hasClaimed[msg.sender] = true;
+        totalClaimed += amount;
+
         usdc.safeTransfer(msg.sender, amount);
 
-        emit PrizeClaimed(msg.sender, amount);
+        emit PrizeClaimed(msg.sender, amount, totalClaimed, block.timestamp);
     }
 
     /**
@@ -188,7 +225,7 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
         participants[msg.sender] = false;
         usdc.safeTransfer(msg.sender, entryFee);
 
-        emit EmergencyWithdraw(msg.sender, entryFee);
+        emit EmergencyWithdraw(msg.sender, entryFee, block.timestamp);
     }
 
     /**
@@ -260,5 +297,139 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
         }
 
         return ranked;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        FRONTEND VIEW FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Get comprehensive league information
+     * @return LeagueInfo struct with all league details
+     */
+    function getLeagueInfo() external view returns (LeagueInfo memory) {
+        return LeagueInfo({
+            name: leagueName,
+            creator: creator,
+            entryFee: entryFee,
+            prizePool: prizePool,
+            startTime: startTime,
+            endTime: endTime,
+            participantCount: participantList.length,
+            finalized: finalized,
+            scoresUpdated: scoresUpdated,
+            status: getLeagueStatus()
+        });
+    }
+
+    /**
+     * @notice Get current league status
+     * @return Current LeagueStatus enum value
+     */
+    function getLeagueStatus() public view returns (LeagueStatus) {
+        if (paused()) return LeagueStatus.Cancelled;
+        if (block.timestamp < startTime) return LeagueStatus.NotStarted;
+        if (block.timestamp >= endTime && finalized) return LeagueStatus.Finalized;
+        if (block.timestamp >= endTime) return LeagueStatus.Ended;
+        return LeagueStatus.Active;
+    }
+
+    /**
+     * @notice Get participant information
+     * @param participant Address of participant
+     * @return ParticipantInfo struct with participant details
+     */
+    function getParticipantInfo(address participant) external view returns (ParticipantInfo memory) {
+        return ParticipantInfo({
+            participant: participant,
+            score: fplScores[participant],
+            rank: _getParticipantRank(participant),
+            claimableWinnings: claimableWinnings[participant],
+            hasClaimed: hasClaimed[participant]
+        });
+    }
+
+    /**
+     * @notice Get user stats (useful for UI state)
+     * @param user Address to check
+     * @return isParticipant Whether user has joined
+     * @return score User's FPL score
+     * @return rank User's rank (0 if not participant)
+     * @return claimableAmount Claimable winnings
+     * @return hasClaimedPrize Whether user has claimed
+     * @return canJoin Whether user can join now
+     * @return canClaim Whether user can claim now
+     */
+    function getUserStats(address user)
+        external
+        view
+        returns (
+            bool isParticipant,
+            uint256 score,
+            uint256 rank,
+            uint256 claimableAmount,
+            bool hasClaimedPrize,
+            bool canJoin,
+            bool canClaim
+        )
+    {
+        isParticipant = participants[user];
+        score = fplScores[user];
+        rank = _getParticipantRank(user);
+        claimableAmount = claimableWinnings[user];
+        hasClaimedPrize = hasClaimed[user];
+
+        LeagueStatus status = getLeagueStatus();
+        canJoin = status == LeagueStatus.Active && !isParticipant;
+        canClaim = finalized && claimableAmount > 0 && !hasClaimedPrize;
+    }
+
+    /**
+     * @notice Get time remaining until league ends
+     * @return Seconds remaining (0 if ended)
+     */
+    function getTimeRemaining() external view returns (uint256) {
+        if (block.timestamp >= endTime) return 0;
+        return endTime - block.timestamp;
+    }
+
+    /**
+     * @notice Check if league is currently joinable
+     * @return True if active and not paused
+     */
+    function isJoinable() external view returns (bool) {
+        LeagueStatus status = getLeagueStatus();
+        return status == LeagueStatus.Active;
+    }
+
+    /**
+     * @notice Get prize breakdown (amounts and percentages)
+     * @return amounts Array of prize amounts in USDC
+     * @return percentages Array of prize percentages
+     */
+    function getPrizeBreakdown() external view returns (uint256[] memory amounts, uint256[] memory percentages) {
+        amounts = new uint256[](prizeDistribution.length);
+        percentages = prizeDistribution;
+
+        for (uint256 i = 0; i < prizeDistribution.length; i++) {
+            amounts[i] = (prizePool * prizeDistribution[i]) / 100;
+        }
+    }
+
+    /**
+     * @notice Get participant rank
+     * @param participant Address to check
+     * @return Rank (1-indexed), 0 if not a participant
+     */
+    function _getParticipantRank(address participant) private view returns (uint256) {
+        if (!participants[participant]) return 0;
+
+        address[] memory ranked = _getRankedParticipants();
+        for (uint256 i = 0; i < ranked.length; i++) {
+            if (ranked[i] == participant) {
+                return i + 1;
+            }
+        }
+        return 0;
     }
 }
