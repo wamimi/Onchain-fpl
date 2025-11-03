@@ -114,9 +114,10 @@ contract FPLOracle is FunctionsClient, ConfirmedOwner {
         onlyOwner
         returns (bytes32 requestId)
     {
-        // Check rate limiting
-        if (block.timestamp < lastUpdateTime[leagueAddress] + MIN_UPDATE_INTERVAL) {
-            revert UpdateTooSoon(lastUpdateTime[leagueAddress], MIN_UPDATE_INTERVAL);
+        // Check rate limiting (skip if never updated before)
+        uint256 lastUpdate = lastUpdateTime[leagueAddress];
+        if (lastUpdate > 0 && block.timestamp < lastUpdate + MIN_UPDATE_INTERVAL) {
+            revert UpdateTooSoon(lastUpdate, MIN_UPDATE_INTERVAL);
         }
 
         // Validate source code is set
@@ -248,7 +249,11 @@ contract FPLOracle is FunctionsClient, ConfirmedOwner {
      * @return canUpdate True if update is allowed
      */
     function canUpdateLeague(address leagueAddress) external view returns (bool) {
-        return block.timestamp >= lastUpdateTime[leagueAddress] + MIN_UPDATE_INTERVAL;
+        uint256 lastUpdate = lastUpdateTime[leagueAddress];
+        // If never updated, can update
+        if (lastUpdate == 0) return true;
+        // Otherwise check if interval has passed
+        return block.timestamp >= lastUpdate + MIN_UPDATE_INTERVAL;
     }
 
     /**
@@ -257,7 +262,11 @@ contract FPLOracle is FunctionsClient, ConfirmedOwner {
      * @return timeRemaining Seconds until next update (0 if can update now)
      */
     function getTimeUntilNextUpdate(address leagueAddress) external view returns (uint256) {
-        uint256 nextUpdateTime = lastUpdateTime[leagueAddress] + MIN_UPDATE_INTERVAL;
+        uint256 lastUpdate = lastUpdateTime[leagueAddress];
+        // If never updated, can update immediately
+        if (lastUpdate == 0) return 0;
+
+        uint256 nextUpdateTime = lastUpdate + MIN_UPDATE_INTERVAL;
         if (block.timestamp >= nextUpdateTime) {
             return 0;
         }
