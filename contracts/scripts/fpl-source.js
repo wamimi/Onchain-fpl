@@ -48,43 +48,24 @@ console.log(`Current FPL gameweek: ${currentGameweek.id}`);
 // Use requested gameweek or current if invalid
 const targetGameweek = gameweek > 0 && gameweek <= 38 ? gameweek : currentGameweek.id;
 
-// Step 2: Get league participants from on-chain
-// NOTE: This is a mock - in production, you'd need to fetch this from your API
-// or use Chainlink Any API to read from another contract
-// For now, we'll use a placeholder that should be replaced with real data
-
-// In production, you would:
-// 1. Store participant FPL IDs in your League contract
-// 2. Expose an API endpoint that returns: { leagueAddress: string, fplIds: number[] }
-// 3. Fetch from that endpoint here
+// Step 2: Get league participants and their FPL IDs
+// TODO: Implement backend API endpoint to map league participants to FPL IDs
+// Expected endpoint format: GET /leagues/{address}/participants
+// Expected response: { participants: [{ address: "0x...", fplId: 123456 }] }
 const LEAGUE_API_URL = `https://your-api.com/leagues/${leagueAddress}/participants`;
 
 let participantData;
 try {
   participantData = await fetchWithRetry(LEAGUE_API_URL);
 } catch (error) {
-  // Fallback for testing: Return empty arrays
+  // API endpoint not available yet - return empty result
   console.log("Could not fetch participants, returning empty result");
-
-  // ABI encode empty arrays
-  const emptyAddresses = [];
-  const emptyScores = [];
-
-  return Functions.encodeUint256(0); // Return 0 to signal no data
+  return Functions.encodeUint256(0);
 }
-
-// Expected format from your API:
-// {
-//   "participants": [
-//     { "address": "0x123...", "fplId": 123456 },
-//     { "address": "0x456...", "fplId": 789012 }
-//   ]
-// }
 
 const participants = participantData.participants;
 
 if (!participants || participants.length === 0) {
-  // No participants, return empty
   return Functions.encodeUint256(0);
 }
 
@@ -121,55 +102,24 @@ const scores = results.map(r => r.score);
 
 console.log(`Fetched ${results.length} scores:`, results);
 
-// Step 5: ABI encode the response
+// Step 5: ABI encode response as hex string
 // Format: (address[], uint256[])
-// Solidity will decode as: abi.decode(response, (address[], uint256[]))
+// Contract will decode as: abi.decode(response, (address[], uint256[]))
 
-// Convert hex addresses to bytes
-const addressBytes = addresses.map(addr => {
-  // Remove 0x prefix if present
-  const cleaned = addr.toLowerCase().replace('0x', '');
-  return cleaned;
-});
-
-// Create ABI-encoded response manually
-// This is a simplified version - Chainlink Functions will handle the encoding
-const encoded = Functions.encodeString(
-  JSON.stringify({
-    addresses: addressBytes,
-    scores: scores
-  })
-);
-
-// NOTE: The above is pseudo-code. Actual implementation needs proper ABI encoding
-// For production, you'll need to use a library or manual encoding following ABI spec
-
-// Return the ABI-encoded data
-return encoded;
-
-/**
- * ALTERNATIVE SIMPLER APPROACH:
- * Return hex-encoded data that can be decoded on-chain
- *
- * This approach is simpler and more reliable:
- */
-
-// Create hex-encoded response
 let response = "";
 
-// Encode array length (32 bytes)
+// Array length (32 bytes)
 response += addresses.length.toString(16).padStart(64, '0');
 
-// Encode each address (20 bytes each, padded to 32 bytes)
+// Addresses (20 bytes each, left-padded to 32 bytes)
 addresses.forEach(addr => {
   const cleaned = addr.toLowerCase().replace('0x', '');
   response += cleaned.padStart(64, '0');
 });
 
-// Encode each score (32 bytes each)
+// Scores (32 bytes each)
 scores.forEach(score => {
   response += score.toString(16).padStart(64, '0');
 });
 
-// Return as bytes
 return Uint8Array.from(Buffer.from(response, 'hex'));
