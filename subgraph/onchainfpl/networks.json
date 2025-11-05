@@ -1,0 +1,8 @@
+{
+  "base-sepolia": {
+    "LeagueFactory": {
+      "address": "0x1E3Ef2263e964Cff21Bd3F9e4eB7D2D8385FE690",
+      "startBlock": 33304734
+    }
+  }
+}
