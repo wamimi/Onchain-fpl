@@ -64,6 +64,7 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
     address[] public participantList;
     mapping(address => bool) public participants;
     mapping(address => uint256) public fplScores;
+    mapping(address => uint256) public fplIds; // Maps participant address to their FPL team ID
     mapping(address => uint256) public claimableWinnings;
     mapping(address => bool) public hasClaimed;
 
@@ -73,6 +74,7 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
 
     // Events - Enhanced for frontend indexing
     event ParticipantJoined(address indexed participant, uint256 entryFee, uint256 participantCount, uint256 timestamp);
+    event FPLIdRegistered(address indexed participant, uint256 fplId, uint256 timestamp);
     event ScoresUpdated(address[] participants, uint256[] scores, uint256 timestamp);
     event LeagueFinalized(address[] winners, uint256[] prizes, uint256 timestamp);
     event PrizeClaimed(address indexed winner, uint256 amount, uint256 totalClaimed, uint256 timestamp);
@@ -82,6 +84,9 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
     // Errors
     error InvalidPrizeDistribution();
     error AlreadyJoined();
+    error NotAParticipant();
+    error FPLIdAlreadyRegistered();
+    error InvalidFPLId();
     error LeagueNotStarted();
     error LeagueEnded();
     error LeagueNotEnded();
@@ -144,6 +149,21 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
         usdc.safeTransferFrom(msg.sender, address(this), entryFee);
 
         emit ParticipantJoined(msg.sender, entryFee, participantList.length, block.timestamp);
+    }
+
+    /**
+     * @notice Register FPL team ID for score tracking
+     * @param _fplId The FPL team ID from fantasy.premierleague.com
+     * @dev Must be called by a league participant. FPL ID must be > 0 and unique per participant
+     */
+    function registerFPLId(uint256 _fplId) external {
+        if (!participants[msg.sender]) revert NotAParticipant();
+        if (_fplId == 0) revert InvalidFPLId();
+        if (fplIds[msg.sender] != 0) revert FPLIdAlreadyRegistered();
+
+        fplIds[msg.sender] = _fplId;
+
+        emit FPLIdRegistered(msg.sender, _fplId, block.timestamp);
     }
 
     /**
@@ -256,6 +276,24 @@ contract League is ReentrancyGuard, AccessControl, Pausable {
      */
     function getParticipants() external view returns (address[] memory) {
         return participantList;
+    }
+
+    /**
+     * @notice Get all participants with their registered FPL IDs
+     * @return addresses Array of participant addresses
+     * @return fplIdList Array of corresponding FPL IDs (0 if not registered)
+     */
+    function getParticipantsWithFPLIds() external view returns (address[] memory addresses, uint256[] memory fplIdList) {
+        uint256 length = participantList.length;
+        addresses = new address[](length);
+        fplIdList = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            addresses[i] = participantList[i];
+            fplIdList[i] = fplIds[participantList[i]];
+        }
+
+        return (addresses, fplIdList);
     }
 
     /**
