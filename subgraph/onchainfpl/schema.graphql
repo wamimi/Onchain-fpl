@@ -1,3 +1,31 @@
+# League entity - represents a single league
+type League @entity(immutable: false) {
+  id: Bytes! # League contract address
+  creator: Bytes!
+  name: String!
+  entryFee: BigInt!
+  duration: BigInt!
+  startTime: BigInt!
+  endTime: BigInt!
+  participants: [Participant!]! @derivedFrom(field: "league")
+  createdAt: BigInt!
+  transactionHash: Bytes!
+}
+
+# Participant entity - represents a participant in a league
+type Participant @entity(immutable: false) {
+  id: ID! # leagueAddress-participantAddress
+  league: League!
+  address: Bytes!
+  fplId: BigInt # FPL team ID (0 if not registered)
+  score: BigInt # FPL score (0 if not updated)
+  rank: BigInt # Rank in league (0 if not finalized)
+  claimableWinnings: BigInt # Prize amount
+  hasClaimed: Boolean!
+  joinedAt: BigInt!
+}
+
+# Event: LeagueCreated
 type LeagueCreated @entity(immutable: true) {
   id: Bytes!
   leagueAddress: Bytes! # address
@@ -11,6 +39,7 @@ type LeagueCreated @entity(immutable: true) {
   transactionHash: Bytes!
 }
 
+# Event: OracleUpdated
 type OracleUpdated @entity(immutable: true) {
   id: Bytes!
   oldOracle: Bytes! # address

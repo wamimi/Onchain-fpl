@@ -6,14 +6,32 @@ import {
   Unpaused as UnpausedEvent
 } from "../generated/LeagueFactory/LeagueFactory"
 import {
+  League,
   LeagueCreated,
   OracleUpdated,
   OwnershipTransferred,
   Paused,
   Unpaused
 } from "../generated/schema"
+import { League as LeagueTemplate } from "../generated/templates"
 
 export function handleLeagueCreated(event: LeagueCreatedEvent): void {
+  // Create League entity
+  let league = new League(event.params.leagueAddress)
+  league.creator = event.params.creator
+  league.name = event.params.name
+  league.entryFee = event.params.entryFee
+  league.duration = event.params.duration
+  league.startTime = event.params.timestamp
+  league.endTime = event.params.timestamp.plus(event.params.duration)
+  league.createdAt = event.block.timestamp
+  league.transactionHash = event.transaction.hash
+  league.save()
+
+  // Start indexing this League contract
+  LeagueTemplate.create(event.params.leagueAddress)
+
+  // Create LeagueCreated event entity
   let entity = new LeagueCreated(
     event.transaction.hash.concatI32(event.logIndex.toI32())
   )

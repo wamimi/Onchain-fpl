@@ -36,3 +36,28 @@ dataSources:
         - event: Unpaused(address)
           handler: handleUnpaused
       file: ./src/league-factory.ts
+
+templates:
+  - kind: ethereum/contract
+    name: League
+    network: base-sepolia
+    source:
+      abi: League
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - League
+        - Participant
+      abis:
+        - name: League
+          file: ./abis/League.json
+      eventHandlers:
+        - event: ParticipantJoined(indexed address,uint256,uint256,uint256)
+          handler: handleParticipantJoined
+        - event: FPLIdRegistered(indexed address,uint256,uint256)
+          handler: handleFPLIdRegistered
+        - event: ScoresUpdated(address[],uint256[],uint256)
+          handler: handleScoresUpdated
+      file: ./src/league.ts
