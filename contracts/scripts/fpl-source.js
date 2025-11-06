@@ -48,22 +48,56 @@ console.log(`Current FPL gameweek: ${currentGameweek.id}`);
 // Use requested gameweek or current if invalid
 const targetGameweek = gameweek > 0 && gameweek <= 38 ? gameweek : currentGameweek.id;
 
-// Step 2: Get league participants and their FPL IDs
-// TODO: Implement backend API endpoint to map league participants to FPL IDs
-// Expected endpoint format: GET /leagues/{address}/participants
-// Expected response: { participants: [{ address: "0x...", fplId: 123456 }] }
-const LEAGUE_API_URL = `https://your-api.com/leagues/${leagueAddress}/participants`;
+// Step 2: Query The Graph subgraph for league participants with FPL IDs
+const SUBGRAPH_URL = "https://api.studio.thegraph.com/query/1713636/onchainfpl/v0.1.0";
 
-let participantData;
+const graphqlQuery = {
+  query: `
+    query GetParticipants($leagueId: Bytes!) {
+      participants(where: { league: $leagueId, fplId_gt: 0 }) {
+        address
+        fplId
+      }
+    }
+  `,
+  variables: {
+    leagueId: `0x${leagueAddress}`
+  }
+};
+
+console.log(`Querying subgraph for league: 0x${leagueAddress}`);
+
+let subgraphResponse;
 try {
-  participantData = await fetchWithRetry(LEAGUE_API_URL);
+  const response = await Functions.makeHttpRequest({
+    url: SUBGRAPH_URL,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    data: graphqlQuery
+  });
+
+  if (response.error) {
+    throw new Error(`Subgraph query failed: ${response.error}`);
+  }
+
+  subgraphResponse = response.data;
 } catch (error) {
-  // API endpoint not available yet - return empty result
-  console.log("Could not fetch participants, returning empty result");
+  console.log(`Subgraph query error: ${error.message}`);
+  // Return empty result if subgraph is unavailable
   return Functions.encodeUint256(0);
 }
 
-const participants = participantData.participants;
+if (!subgraphResponse.data || !subgraphResponse.data.participants) {
+  console.log("No participant data in subgraph response");
+  return Functions.encodeUint256(0);
+}
+
+const participants = subgraphResponse.data.participants.map(p => ({
+  address: p.address,
+  fplId: parseInt(p.fplId)
+}));
 
 if (!participants || participants.length === 0) {
   return Functions.encodeUint256(0);
